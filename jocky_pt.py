@@ -9,7 +9,7 @@ torch.cuda.empty_cache()
 import transformers
 from peft import PeftModel
 
-local_model_path = "./jockypt-ft/checkpoint-240"
+local_model_path = "./jockypt-ft/checkpoint-430"
 
 print("Loading models...")
 
@@ -57,7 +57,7 @@ def inference(message, history, no_bot = False, member = 'Yogipanda', temperatur
 		if no_bot:
 			message = input("User: ")
 		prompt_input = eval_tokenizer.apply_chat_template(
-															[{"role": "system", "content": f"{sys_instruct}"}] +
+															#[{"role": "system", "content": f"{sys_instruct}"}] + # mistral does not support sys prompts explicitly, must be trained on it
 															[{"role": entry['role'], "content": entry['content']} for entry in history] + #
 															[{"role": "user", "content": message}],
 															tokenize=False,
@@ -70,23 +70,24 @@ def inference(message, history, no_bot = False, member = 'Yogipanda', temperatur
 		
 		peft_model.eval()
 
-		output = base_model.generate(
-										input_ids, 
-										attention_mask=inputs["attention_mask"].to('cuda'), 
-										pad_token_id=eval_tokenizer.eos_token_id, 
-										max_new_tokens=512, # 256
-										no_repeat_ngram_size=2,
-										temperature= 0.8 if temperature is None else temperature, # Note: this is not where initial temp is set
-										repetition_penalty=1.1,
-										top_p=0.9,
-										top_k=50,
-										do_sample=True,
-									)
-		
-		print(output)
 		
 		with torch.no_grad():
-			generated_text = eval_tokenizer.batch_decode({output[0][input_ids.shape[1]:]}, skip_special_tokens=True)
+			output = base_model.generate(
+											input_ids, 
+											attention_mask=inputs["attention_mask"].to('cuda'), 
+											eos_token_id=eval_tokenizer.eos_token_id,
+											pad_token_id=eval_tokenizer.pad_token_id,
+											max_new_tokens=128, # 512
+											no_repeat_ngram_size=3,
+											temperature= 0.7 if temperature is None else temperature, # Note: this is not where initial temp is set
+											repetition_penalty=1.3,
+											top_p=0.85,
+											top_k=30,
+											do_sample=True,
+										)
+			
+			print(output)
+			generated_text = eval_tokenizer.batch_decode([output[0][input_ids.shape[1]:]], skip_special_tokens=True)
 
 		return generated_text[0]
 

@@ -1,5 +1,7 @@
 ## Imports
 import gc
+import wandb
+wandb.login()
 import torch
 torch.cuda.empty_cache()
 print(f"Cuda Available: {torch.cuda.is_available()}")
@@ -8,14 +10,9 @@ print(torch.randn(1).cuda())
 gc.collect()
 torch.cuda.empty_cache()
 import atexit
-from content.automated import format_json
 
-import numpy as np
 import json
-import random
 import transformers
-from accelerate import init_empty_weights
-#import matplotlib.pyplot as plt
 from datasets import load_dataset
 from peft import prepare_model_for_kbit_training, LoraConfig, get_peft_model
 
@@ -55,32 +52,88 @@ def main():
 																add_bos_token=True,
 																add_eos_token=False, 
 															)
-	print("Padding:", tokenizer.padding_side)
+	
+	# Mistral is a deconstruct, which reads left during inference, but training sees fixed length sequences, so padding is best set to right for training.
+	tokenizer.padding_side = 'right'
+	
+	print("Padding side set to:", tokenizer.padding_side)
 	print(tokenizer.pad_token)
 
 	if tokenizer.pad_token == None:
-		print("Setting padding")
-		tokenizer.pad_token = tokenizer.unk_token
+		tokenizer.pad_token = tokenizer.eos_token #tokenizer.unk_token during inference, eos for consistancy during training
+		print("Set padding token to:", tokenizer.pad_token)
 	else:
-		print("Defaulting to padding:",tokenizer.pad_token)
+		print("Default padding token set to:", tokenizer.pad_token)
 
-	max_seq_length = 512 #256
+	max_seq_length = 128 # 512 #
 
 	def generate_and_tokenize_prompt(batch):
-		template = [tokenizer.apply_chat_template(
-							conversation, 
-							tokenize=False, 
-							add_generation_prompt=True,
-							add_special_tokens=False,
-						) for conversation in batch['messages']]
-		tokenized = tokenizer(
-			template,
-			truncation=True,
-			max_length=max_seq_length,
-			padding="max_length",
-		)
-		tokenized["labels"] = tokenized["input_ids"].copy()
-		return tokenized
+		all_input_ids = []
+		all_attention_masks = []
+		all_labels = []
+
+		for conversation in batch['messages']:
+			full_text = tokenizer.apply_chat_template(
+				conversation,
+				tokenize=False,
+				add_generation_prompt=False,
+				add_special_tokens=True
+			)
+
+			tokenized = tokenizer(
+				full_text,
+				truncation=True,
+				max_length=max_seq_length,
+				padding="max_length",
+				add_special_tokens=False
+			)
+
+			input_ids = tokenized["input_ids"]
+			labels = [-100] * len(input_ids)
+
+			current_messages = []
+			for turn in conversation:
+				current_messages.append(turn)
+				
+				if turn["role"] == "assistant":
+					text_up_to_here = tokenizer.apply_chat_template(
+						current_messages,
+						tokenize=False,
+						add_generation_prompt=False,
+						add_special_tokens=True
+					)
+					
+					text_up_to_prompt = tokenizer.apply_chat_template(
+						current_messages[:-1],
+						tokenize=False,
+						add_generation_prompt=True,
+						add_special_tokens=True
+					)
+					
+					# Tokenize both to find boundaries
+					end_idx = len(tokenizer(
+						text_up_to_here,
+						add_special_tokens=False
+					)["input_ids"])
+					
+					start_idx = len(tokenizer(
+						text_up_to_prompt,
+						add_special_tokens=False
+					)["input_ids"])
+					
+					# Unmask this assistant's response tokens in labels
+					for i in range(start_idx, min(end_idx, len(labels))):
+						labels[i] = input_ids[i]
+
+			all_input_ids.append(input_ids)
+			all_attention_masks.append(tokenized["attention_mask"])
+			all_labels.append(labels)
+
+		return {
+			"input_ids": all_input_ids,
+			"attention_mask": all_attention_masks,
+			"labels": all_labels,
+		}
 
 	exhahustive_modules = [
 							"q_proj",
@@ -128,11 +181,11 @@ def main():
 	'''
 
 	config = LoraConfig(
-							r=32, # lower r for smaller datasets
-							lora_alpha=64,
+							r=16, # lower r for smaller datasets
+							lora_alpha=32, # recommended 2x r
 							target_modules= default_modules,
 							bias="none",
-							lora_dropout= 0.075,
+							lora_dropout= 0.05,
 							task_type="CAUSAL_LM",
 						)
 
@@ -154,20 +207,21 @@ def main():
 	### Training Params ###
 
 	dataset_max = -1
-	gif_ratio= -1
-
-	
 
 	lr = 4.5e-6
 	weight_decay = 0.02 # 0.05 for checkpoint overfitting, 0.01 for training
 	batch_size = 4
-	max_steps = 350
+	max_steps = 600
 	seed= 335679
 
 	dataset_path = "./content/handmade.json"
 
 	data = load_dataset('json', data_files=dataset_path)
 	tokenized_data = data['train'].train_test_split(test_size=0.12, seed=seed)
+
+	
+
+	
 	
 	tokenized_data['train'] = tokenized_data['train'].map(
 						generate_and_tokenize_prompt,
@@ -178,8 +232,24 @@ def main():
 	tokenized_data['test'] = tokenized_data['test'].map(
 						generate_and_tokenize_prompt, 
 						batched=True,
+						batch_size=1,
 						remove_columns=tokenized_data["test"].column_names,
 					)
+	lengths = []
+	for sample in tokenized_data['train']:
+		real_tokens = sum(1 for id in sample['input_ids'] if id != tokenizer.pad_token_id)
+		lengths.append(real_tokens)
+	
+	print(f"Max: {max(lengths)}")
+	print(f"Mean: {sum(lengths)/len(lengths):.0f}")
+	print(f"95th percentile: {sorted(lengths)[int(len(lengths)*0.95)]}")
+
+	sample = tokenized_data['train'][0]
+	non_masked = [l for l in sample['labels'] if l != -100]
+	print(tokenizer.decode(non_masked))
+	print(tokenizer.decode(sample['input_ids']))
+
+	print()
 
 	
 	with open('./train_data.json', 'w', encoding='utf-8') as f:
@@ -197,7 +267,7 @@ def main():
 
 	training_args = transformers.TrainingArguments(
 													output_dir = "jockypt-ft",
-													run_name=f"jockypt-model:{model_name[:7]}-set:{dataset_max}-seed:{seed}-ratio:{gif_ratio}-steps:{max_steps}-batch:{batch_size}-seq:{max_seq_length}-lr:{lr}-decay:{weight_decay}-r:{config.r}-a:{config.lora_alpha}",
+													run_name=f"jockypt-model:{model_name[:7]}-set:{dataset_max}-seed:{seed}-steps:{max_steps}-batch:{batch_size}-seq:{max_seq_length}-lr:{lr}-decay:{weight_decay}-r:{config.r}-a:{config.lora_alpha}",
 													learning_rate=lr,
 													per_device_train_batch_size=batch_size,
 													per_device_eval_batch_size=batch_size,
@@ -218,6 +288,9 @@ def main():
 													bf16=False,
 													fp16=True,
 													optim="paged_adamw_8bit",
+													remove_unused_columns=False,
+													dataloader_pin_memory=False,
+													report_to="wandb",
 												)
 
 	trainer = transformers.Trainer(

@@ -3,6 +3,7 @@ import re
 import json
 import ijson
 import random
+import dismoji
 import requests
 from dotenv import load_dotenv
 from collections import defaultdict
@@ -20,6 +21,22 @@ ids = []
 for key, value in ping_info_data.items():
     usernames.append(key)
     ids.append(value)
+
+emoticon_pattern = re.compile(
+        "[\U0001F600-\U0001F64F"    # Emoticons
+        "\U0001F300-\U0001F5FF"     # Symbols & Pictographs
+        "\U0001F680-\U0001F6FF"     # Transport & Map Symbols
+        "\U0001F700-\U0001F77F"     # Alchemical Symbols
+        "\U0001F780-\U0001F7FF"     # Geometric Shapes Extended
+        "\U0001F800-\U0001F8FF"     # Supplemental Arrows-C
+        "\U0001F900-\U0001F9FF"     # Supplemental Symbols and Pictographs
+        "\U0001FA00-\U0001FA6F"     # Chess Symbols
+        "\U0001FA70-\U0001FAFF"     # Symbols and Pictographs Extended-A
+        "\U00002700-\U000027BF"     # Dingbats
+        "\U00002600-\U000026FF"     # Miscellaneous Symbols (includes ♥️)
+        "]+",
+        flags=re.UNICODE
+    )
 
 
 load_dotenv()
@@ -79,21 +96,7 @@ def format_json(entries = -1, use_multi_turn = True, additive_dataset = False, o
 
     pings = defaultdict(int)
 
-    emoticon_pattern = re.compile(
-        "[\U0001F600-\U0001F64F"    # Emoticons
-        "\U0001F300-\U0001F5FF"     # Symbols & Pictographs
-        "\U0001F680-\U0001F6FF"     # Transport & Map Symbols
-        "\U0001F700-\U0001F77F"     # Alchemical Symbols
-        "\U0001F780-\U0001F7FF"     # Geometric Shapes Extended
-        "\U0001F800-\U0001F8FF"     # Supplemental Arrows-C
-        "\U0001F900-\U0001F9FF"     # Supplemental Symbols and Pictographs
-        "\U0001FA00-\U0001FA6F"     # Chess Symbols
-        "\U0001FA70-\U0001FAFF"     # Symbols and Pictographs Extended-A
-        "\U00002700-\U000027BF"     # Dingbats
-        "\U00002600-\U000026FF"     # Miscellaneous Symbols (includes ♥️)
-        "]+",
-        flags=re.UNICODE
-    )
+    
 
     
     
@@ -343,7 +346,10 @@ def pattern_match(message, pings = None):
 
     tenor_pattern = re.compile(r"https://tenor\.com/", re.IGNORECASE)
     
+    message = dismoji.demojize(message)
+
     message_only = message
+    
     while True:
         match = ping_pattern.search(message)
         if not match:
@@ -356,10 +362,10 @@ def pattern_match(message, pings = None):
         if pings:
             pings[id_to_username] += 1
 
-        message_replacement = f'[@{id_to_username}]'
+        message_replacement = f'<@{id_to_username}>'
         message_post = message[match.end():]
         message_only.replace(message_replacement, '')
-        message = f"{message_pre}{message_replacement if message_replacement != '[@]' else ''}{message_post}"
+        message = f"{message_pre}{message_replacement if message_replacement != '<@>' else ''}{message_post}"
     
     while True:
         match = emoji_pattern.search(message)

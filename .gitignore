@@ -180,3 +180,5 @@ funny_responses/
 jockypt-ft/
 LLaMA_Quant/
 wandb/
+test_data.json
+train_data.json
