@@ -9,7 +9,7 @@ torch.cuda.empty_cache()
 import transformers
 from peft import PeftModel
 
-local_model_path = "./jockypt-ft/checkpoint-430"
+local_model_path = "./jockypt-pt/checkpoint-430"
 
 print("Loading models...")
 
