@@ -17,7 +17,7 @@ gif_pattern = re.compile(r"\[gif:[A-Za-z0-9_ ,\-\(\)]+\]", re.IGNORECASE)
 dataset_path = "content/ping_info.json"
 rolling_messages = {"length": 0, "messages": []}
 
-def tenor_lookup(search_term, lmt = 12):
+def tenor_lookup(search_term, lmt = 1):
 
     api_key = os.getenv('TENOR_API_KEY')
 
@@ -36,6 +36,61 @@ def tenor_match(url):
 	gifs = tenor_lookup(url[1:min(30,len(url))], lmt)
 	if(type(gifs) == dict and len(gifs['results']) > 0):
 		return gifs['results'][0]['itemurl']
+
+	return ''
+
+def klipy_lookup(search_term, lmt = 1):
+
+	api_key = os.getenv('KLIPY_API_KEY')
+
+	customer_id = 'jocky_api'
+	session = requests.Session()
+	req = session.get(
+						f"https://api.klipy.com/api/v1/{api_key}/gifs/search?q={search_term}&customer_id={customer_id}&per_page={lmt}&locale=en&content_filter=r", 
+						headers={'User-Agent': 'Mozilla/5.0'}
+					)
+
+	if req.status_code == 200:
+		return json.loads(req.content)
+	else:
+		return None
+	
+def klipy_match(url):
+
+	lmt = 1
+
+	gifs = klipy_lookup(url[1:min(30,len(url))], lmt)
+	if(type(gifs) == dict and gifs['result'] == True and len(gifs['data']['data']) > 0):
+		return gifs['data']['data'][0]['file']['hd']['gif']['url']
+
+	return ''
+
+def giphy_lookup(search_term, lmt = 1):
+
+	api_key = os.getenv('GIPHY_API_KEY')
+
+	customer_id = 'jocky_api'
+	session = requests.Session()
+	req = session.get(
+						f"https://api.giphy.com/v1/gifs/search?api_key={api_key}&q={search_term}&random_id={customer_id}&limit={lmt}&lang=en&rating=r", 
+						headers={'User-Agent': 'Mozilla/5.0'}
+					)
+
+	if req.status_code == 200:
+		return json.loads(req.content)
+	else:
+		return None
+	
+def giphy_match(url):
+
+	lmt = 1
+
+	gifs = giphy_lookup(url[1:min(30,len(url))], lmt)
+	if(type(gifs) == dict and len(gifs['data']) > 0):
+		ret = gifs['data']
+		ret = ret[0]
+		ret = ret['embed_url']
+		return gifs['data'][0]['embed_url']
 
 	return ''
 
@@ -63,10 +118,10 @@ def unsanitize(response):
 	while match:
 		match = gif_pattern.search(response)
 		if match:
-			gif_link = tenor_match(response[match.start()+5:match.end()-1])
+			gif_link = giphy_match(response[match.start()+5:match.end()-1])
 			response = f'{response[:match.start()]} {gif_link} {response[match.end():]}'
 	
-	return response #.partition('\n')[0])#.partition('<')[0])
+	return response
 
 def bot_main():
 
@@ -97,7 +152,7 @@ def bot_main():
 			if message.author == client.user:
 				return
 			
-			temperature = 0.8
+			temperature = 0.7
 
 			if match := re.search(r'temperature=[0-9]*\.[0-9]+', message.content):
 				temperature = message.content[match.start()+len('temperature='):match.end()]

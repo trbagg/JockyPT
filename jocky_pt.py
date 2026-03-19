@@ -9,7 +9,7 @@ torch.cuda.empty_cache()
 import transformers
 from peft import PeftModel
 
-local_model_path = "./jockypt-ft/checkpoint-430"
+local_model_path = "./jockypt-ft/checkpoint-180"
 
 print("Loading models...")
 
@@ -23,16 +23,17 @@ bnb_config = transformers.BitsAndBytesConfig(
 												load_in_4bit=True,
 												bnb_4bit_use_double_quant=True,
 												bnb_4bit_quant_type="nf4",
-												bnb_4bit_compute_dtype=torch.float16
+												bnb_4bit_compute_dtype=torch.bfloat16
 											)
 
 base_model = transformers.AutoModelForCausalLM.from_pretrained(
 	model_name,
 	cache_dir=cache_dir, 
 	quantization_config=bnb_config,
-	dtype=torch.float16,
+	dtype=torch.bfloat16,
 	device_map="auto",
 	trust_remote_code=True,
+	#attn_implementation="flash_attention_2"
 )
 
 base_model.config.use_flash_attention = True
@@ -42,11 +43,18 @@ eval_tokenizer = transformers.AutoTokenizer.from_pretrained(model_name,
 															add_eos_token=False,  
 															trust_remote_code=True)
 
+test_text = "[gif: ;) :) \\_/ :3"
+tokens = eval_tokenizer.encode(test_text)
+decoded = eval_tokenizer.decode(tokens)
+print(f"Original: {test_text}")
+print(f"Decoded: {decoded}")
+print()
+
 peft_model = PeftModel.from_pretrained(
 										base_model, 
 									 	local_model_path,
 										device_map="auto",
-										dtype=torch.float16
+										dtype=torch.bfloat16
 									)
 
 
@@ -79,8 +87,8 @@ def inference(message, history, no_bot = False, member = 'Yogipanda', temperatur
 											pad_token_id=eval_tokenizer.pad_token_id,
 											max_new_tokens=128, # 512
 											no_repeat_ngram_size=3,
-											temperature= 0.7 if temperature is None else temperature, # Note: this is not where initial temp is set
-											repetition_penalty=1.3,
+											temperature= 0.7 if temperature is None else temperature, # Note: initial temp is set in jocky_bot.py when calling inference()
+											repetition_penalty=1.2,
 											top_p=0.85,
 											top_k=30,
 											do_sample=True,

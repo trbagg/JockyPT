@@ -40,7 +40,8 @@ emoticon_pattern = re.compile(
 
 
 load_dotenv()
-API_KEY = os.getenv('TENOR_API_KEY')
+KLIPY_API_KEY = os.getenv('KLIPY_API_KEY')
+GIPHY_API_KEY = os.getenv('GIPHY_API_KEY')
 
 def tenor_tags(link):
     return_phrase = "[gif:"
@@ -66,6 +67,60 @@ def tenor_tags(link):
         return '[gif:]'
 
 def tenor_keywords(link):
+    keywords = f"[gif: {link[len('https://tenor.com/view/'):]}]"
+    keywords = re.sub(r'[0-9][0-9]+', '', keywords)
+    keywords = re.sub(r'-+', ' ', keywords)
+    if keywords[-2] == ' ':
+        keywords= keywords[:-2] + keywords[-1:]
+    keywords = keywords.split()
+    for index, word in enumerate(keywords.copy()):
+        if re.search(r'%[A-Z0-9]', word):
+            keywords.remove(word)
+        elif 'gif' in word and index > 0:
+            keywords.remove(word)
+        elif 'giphy' in word:
+            keywords.remove(word)
+    seen = set()
+    list = keywords.copy()
+    
+    keywords = [x for x in list if not (x in seen or seen.add(x))]
+    
+    if ']' not in keywords[-1]:
+         keywords[-1] =  keywords[-1] + ']'
+    keywords = ' '.join(keywords)
+    if len(keywords) <= 8:
+        return None
+    else:
+        return keywords
+
+def klipy_tags(slug):
+    return_phrase = "[gif:"
+
+    session = requests.Session()
+    if slug is None:
+        return 'Error fetching Klipy API'
+    req = session.get(
+                            url=f"https://api.klipy.com/api/v1/{KLIPY_API_KEY}/gifs/items?slugs={slug}", 
+                            headers={'User-Agent': 'Mozilla/5.0'}
+                        )
+    if req.status_code != 200:
+        return None
+    
+    response = json.loads(req.content)
+    if response['data'] is None or response['data']['data'] is None or response['data']['data'][0] is None:
+        return '[gif:]'
+    if len(response['data']['data'][0]['title']) > 0:
+        for tag in response['data']['data'][0]['title'].split():
+            return_phrase += f' {tag},'
+        return return_phrase[:-1] + ']'
+    elif len(response['data']['data'][0]['slug']) > 0:
+        for tag in response['data']['data'][0]['slug'].split('-'):
+            return_phrase += f' {tag},'
+        return return_phrase[:-1] + ']'
+    else:
+        return '[gif:]'
+
+def klipy_keywords(link):
     keywords = f"[gif: {link[len('https://tenor.com/view/'):]}]"
     keywords = re.sub(r'[0-9][0-9]+', '', keywords)
     keywords = re.sub(r'-+', ' ', keywords)
@@ -344,7 +399,7 @@ def pattern_match(message, pings = None):
 
     emoji_word_pattern = re.compile(r"<a*:[A-Za-z0-9_]+:", re.IGNORECASE)
 
-    tenor_pattern = re.compile(r"https://tenor\.com/", re.IGNORECASE)
+    klipy_pattern = re.compile(r"^(.*)(https:\/\/klipy\.com\/gifs\/)([^\s]*)(.*)", re.IGNORECASE)
     
     message = dismoji.demojize(message)
 
@@ -378,19 +433,18 @@ def pattern_match(message, pings = None):
         message = f"{message_pre}{message_replacement}{message_post}"
 
     while True:
-        match = tenor_pattern.search(message)
+        match = klipy_pattern.search(message)
         if not match:
             break
-        link_end = message[match.start():].find(' ')
-        if link_end == -1 or link_end == len(message):
-            link_end = len(message)
-        message_pre = message[:match.start()]
-        #message_replacement = tenor_keywords(message[match.start():link_end])
-        message_replacement = tenor_tags(message[match.start():link_end])
+        print(match.group(0))
+        print(match.group(1))
+        print(match.group(2))
+        print(match.group(3))
+        print(match.group(4))
+        message_replacement = klipy_tags(match.group(3))
         if message_replacement == 'None':
             return (message, "Message contains invalid tenor gif")
-        message_post = message[link_end:]
-        message = f"{message_pre}{message_replacement}{message_post}"
+        message = f"{match.group(1)}{message_replacement}{match.group(4)}"
     
     return message, message_only
 
