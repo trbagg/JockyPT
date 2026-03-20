@@ -86,7 +86,7 @@ def fluff(input_path, output_path, iters, tokenizer, model):
         decoded_texts = tokenizer.batch_decode([text[input_ids.shape[1]:] for text in generated_outputs], skip_special_tokens=True) # [generated_outputs[0][input_ids.shape[1]:]]
         
         for output_text in decoded_texts:
-            data.append({'prompt': prompt, 'chosen': {'role': 'assistant', 'content': output_text}, 'rejected': rejected})
+            data.append({'prompt': prompt, 'chosen': [{'role': 'assistant', 'content': output_text}], 'rejected': rejected})
 
 
     with open(output_path, 'w', encoding='utf-8') as f:
