@@ -79,7 +79,7 @@ def klipy_tags(slug):
         return None
     
     response = json.loads(req.content)
-    if response['data'] is None or response['data']['data'] is None or response['data']['data'][0] is None:
+    if response['results'] is False or response['data'] is None or response['data']['data'] is None or response['data']['data'][0] is None:
         return '[gif:]'
     if len(response['data']['data'][0]['title']) > 0:
         for tag in response['data']['data'][0]['title'].split():

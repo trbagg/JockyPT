@@ -97,17 +97,17 @@ def ping_match(ping, discord_association):
 	chosen = None
 
 	for username in usernames:
-		val = difflib.SequenceMatcher(None,ping, username).ratio()
+		val = difflib.SequenceMatcher(None,ping.lower(), username.lower()).ratio()
 		if val > best_val:
 			best_val = val
-			chosen = discord_association.get(ping)
+			chosen = discord_association.get(ping.lower())
 
-	return f"<@{chosen if chosen is not None else f'(A ping error happened when attempting to ping: {ping} as {chosen})'}>"
+	return f"<@{chosen if chosen is not None else f'(A ping error happened when attempting to ping: {ping.lower()} as {chosen})'}>"
 
 def unsanitize(response):
 	match = True
 	while match:
-		match = ping_pattern.search(response)
+		match = ping_pattern.search(response.lower())
 		if match:
 			response = response[:match.start()] + ping_match(response[match.start()+2:match.end()-1], discord_association) + response[match.end():]
 

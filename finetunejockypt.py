@@ -126,11 +126,11 @@ def main():
 
 	dataset_max = -1
 
-	lr = 6e-6
+	lr = 8e-6
 	weight_decay = 0.01 # 0.05 for checkpoint overfitting, 0.01 for training
 	batch_size = 1
-	max_steps = 600
-	beta = 0.50
+	max_steps = 1000
+	beta = 0.3
 
 	dataset_path = "./content/synth_orpo.json" # "./content/handmade_orpo.json" # 
 
