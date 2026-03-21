@@ -129,7 +129,7 @@ def main():
 	lr = 6e-6
 	weight_decay = 0.01 # 0.05 for checkpoint overfitting, 0.01 for training
 	batch_size = 1
-	max_steps = 300
+	max_steps = 600
 	beta = 0.50
 
 	dataset_path = "./content/synth_orpo.json" # "./content/handmade_orpo.json" # 
@@ -188,7 +188,7 @@ def main():
 	
 	print("chosen logits:", trainer.eval_dataset[0])
 
-	trainer.train(resume_from_checkpoint=False) # False # True , ignore_keys_for_eval=["optimizer", "scheduler"]
+	trainer.train(resume_from_checkpoint=True , ignore_keys_for_eval=["optimizer", "scheduler"]) # False #
 
 	print("Finished training")
 
