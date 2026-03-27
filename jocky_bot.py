@@ -117,8 +117,8 @@ def unsanitize(response):
 	while match:
 		match = gif_pattern.match(response)
 		if match:
-			gif_link = giphy_match(response[match.group(2).start()+5:match.group(2).end()-1])
-			response = f'{response[:match.group(2).start()]} {gif_link} {response[match.group(2).end():]}'
+			gif_link = giphy_match(response[match.span(2)[0]+5:match.span(2)[1]-1])
+			response = f'{response[:match.span(2)[0]]} {gif_link} {response[match.span(2)[1]:]}'
 	
 	return response
 
@@ -160,8 +160,13 @@ def bot_main():
 			
 
 			inference_message, _ = pattern_match(message.content) # sanitize gifs, emotes, etc. to match dataset pattern
-			message_response = inference(message=inference_message, history=rolling_messages['messages'] if not isinstance(message.channel, discord.DMChannel) else [], member=message.author, temperature=float(temperature))
-			print("Original message:", message_response)
+			image = None
+			url = None
+			attachments = message.attachments
+			if attachments and len(attachments) > 0:
+				url = attachments[0].proxy_url
+			message_response = inference(message=inference_message, url=url if url != '' else None, history=rolling_messages['messages'] if not isinstance(message.channel, discord.DMChannel) else [], member=message.author, temperature=float(temperature))
+			print("Unsanitized message:", message_response)
 			message_history(rolling_messages, user='user', msg=inference_message) # save sanitized output (for input consistancy)
 			message_history(rolling_messages, user='assistant', msg=message_response)
 			message_response = unsanitize(message_response) # then after saving, apply discord formatting
